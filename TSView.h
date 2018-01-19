@@ -31,6 +31,9 @@ public:
 	std::vector<float> EstimatedPassingTravelTimeVector;  // unit: second: from upstream to here (DetectorLocalY)
 	// based sampling ratio
 
+	//sdzhao
+	std::map<int, std::vector<double>> observed_spd_within_sensor_time_rectangle;
+
 	void ConstructEsimatedTravelTimeVector()
 	{
 	 // input: true PassingTravelTimeVector
@@ -166,6 +169,8 @@ public:
 	std::vector<float> FlowVector;  // average flow rates
 	std::vector<int> UpstreamCumulativeFlowVector;  // average flow rates
 
+	//sdzhao
+	std::map<int, std::vector<double>> observed_spd_within_sensor_time_rectangle;
 
 	std::vector<int> EstimatedSpaceScanCountVector;  // space-based scan count using image scanning
 
@@ -260,12 +265,16 @@ public:
 		{
 
 		SpaceCountVector[t] = abs(detector1.CumulativeFlowVector [t] - detector2.CumulativeFlowVector [t]);
-		DensityVector[t] = abs(detector1.CumulativeFlowVector [t] - detector2.CumulativeFlowVector [t])/DetectorSpacing_in_miles;
+
+		//sdzhao: density should be calculated by ConstructCellBasedDensityProfile
+		//DensityVector[t] = abs(detector1.CumulativeFlowVector [t] - detector2.CumulativeFlowVector [t])/DetectorSpacing_in_miles;
+
+		//sdzhao: should not calculate flow and then estimate speed. We should calculate average speed, than calculate q = kv. (ref: http://www.me.berkeley.edu/~horowitz/Publications_files/All_papers_numbered/177C_LU_FD_Model.pdf)
 		// approximation using mean
-		FlowVector[t] = (detector1.GetFlowCount(t) + detector2.GetFlowCount(t))/2 * (3600/DataCollectionTimeInterval_in_sec);  // per hour volume
+		//FlowVector[t] = (detector1.GetFlowCount(t) + detector2.GetFlowCount(t))/2 * (3600/DataCollectionTimeInterval_in_sec);  // per hour volume
 
 		//q= kv --> v = q/k
-		SpeedVector[t] = 	FlowVector[t] / max(1,DensityVector[t]);
+		//SpeedVector[t] = 	FlowVector[t] / max(1,DensityVector[t]);
 		}
 
 	
@@ -275,6 +284,9 @@ public:
 class CorridorSensorData
 {
 public: 
+	//sdzhao
+	ostringstream out_FD_variables;
+
 
 	CorridorSensorData()
 	{
@@ -385,7 +397,7 @@ public:
 			PointSensorDataVector[d], 
 			DataCollectionTimeInterval_in_sec,
 			PointSensorDataVector[d].DetectorLocalY - PointSensorDataVector[d-1].DetectorLocalY);
-		
+			element.observed_spd_within_sensor_time_rectangle = PointSensorDataVector[d - 1].observed_spd_within_sensor_time_rectangle;
 			LinkSensorDataVector.push_back (element);
 		}
 	
@@ -502,6 +514,9 @@ public:
 
 	bool m_bShowCumulativeFlowCount; 
 	bool m_bShowDensityContour; 
+
+	bool m_bExportFDStreamVariables;
+
 	bool m_bShowPDFPlot;
 
 
@@ -554,7 +569,7 @@ public:
 	}
 
 	int CountVehicles(int StartTime, int EndTime, float StartLocalY,float EndlocalY);
-
+	double CalculateSpaceMeanSpeed(int StartTime, int EndTime, LinkSensorData &element);
 	void HSVtoRGB( float *r, float *g, float *b, float h, float s, float v )
 {
 	int i;
@@ -730,7 +745,13 @@ public:
 	afx_msg void OnNgsimmenuShowcalculatedcumulativeflowcountanddensity();
 	afx_msg void OnUpdateNgsimmenuShowcalculatedcumulativeflowcountanddensity(CCmdUI *pCmdUI);
 	afx_msg void OnNgsimmenuShowspacetimeContour();
+
+	afx_msg void OnNgsimmenuExportFDStreamVariables();
+
 	afx_msg void OnUpdateNgsimmenuShowspacetimeContour(CCmdUI *pCmdUI);
+
+	afx_msg void OnUpdateNgsimmenuExportFDStreamVariables(CCmdUI *pCmdUI);
+
 	afx_msg void OnNgsimmenuShowcdfplot();
 	afx_msg void OnUpdateNgsimmenuShowcdfplot(CCmdUI *pCmdUI);
 };

@@ -2935,7 +2935,7 @@ BEGIN
         POPUP "NGSIM  Tools"
         BEGIN
             MENUITEM "Activate Space-Time View for Visualizing NGSIM Data", ID_NGSIMMENU_ACTIVATESPACE
-            MENUITEM "Load Vehicle Trajactory File", ID_TOOLS_LOADVEHICLETRAJACTORYFILE
+            MENUITEM "Load Vehicle Trajectory File", ID_TOOLS_LOADVEHICLETRAJECTORYFILE
             MENUITEM "Lane 1",                      ID_NGSIMDATA_LANE1
             MENUITEM "Lane 2",                      ID_NGSIMDATA_LANE2
             MENUITEM "Lane 3",                      ID_NGSIMDATA_LANE3
@@ -2947,6 +2947,7 @@ BEGIN
             MENUITEM "Show Vehicle ID",             ID_NGSIMDATA_SHOWVEHICLEID
             MENUITEM "Show Calculated Cumulative Flow Count and Density", ID_NGSIMMENU_SHOWCALCULATEDCUMULATIVEFLOWCOUNTANDDENSITY
             MENUITEM "Show Space-Time Density Contour", ID_NGSIMMENU_SHOWSPACETIME_CONTOUR
+			MENUITEM "Export Fundamental Diagram Stream Variables", ID_NGSIMMENU_EXPORT_FUNDAMENTAL_VARIABLES
             MENUITEM SEPARATOR
             MENUITEM "Export Data to Text File",    ID_NGSIMDATA_CARFOLLOWINGDATAEXTRACTION
             MENUITEM "Search by Vehicle ID",        ID_NGSIMDATA_SEARCH_BY_VEHICLE_ID
@@ -3129,7 +3130,7 @@ BEGIN
         MENUITEM "NGSIM Data",                  ID_IMPORT_NGSIM_FILE
         POPUP "NGSIM  Menu"
         BEGIN
-            MENUITEM "Load Vehicle Trajactory File", ID_TOOLS_LOADVEHICLETRAJACTORYFILE
+            MENUITEM "Load Vehicle Trajectory File", ID_TOOLS_LOADVEHICLETRAJECTORYFILE
             MENUITEM "Lane 1",                      ID_NGSIMDATA_LANE1
             MENUITEM "Lane 2",                      ID_NGSIMDATA_LANE2
             MENUITEM "Lane 3",                      ID_NGSIMDATA_LANE3
@@ -3145,6 +3146,7 @@ BEGIN
             MENUITEM "Show Preceeding Vehicle Position", ID_NGSIMDATA_SHOWPRECEEDINGVEHICLEPOSITION
             MENUITEM "Show Calculated Cumulative Flow Count and Density", ID_NGSIMMENU_SHOWCALCULATEDCUMULATIVEFLOWCOUNTANDDENSITY
             MENUITEM "Show Space-Time Density Contour", ID_NGSIMMENU_SHOWSPACETIME_CONTOUR
+			MENUITEM "Export Fundamental Diagram Stream Variables", ID_NGSIMMENU_EXPORT_FUNDAMENTAL_VARIABLES
             MENUITEM SEPARATOR
             MENUITEM "Show Simulated Results",      ID_NGSIMDATA_SHOWSIMULATEDRESULTS
             MENUITEM "Show both Observed and Simulation Results", ID_NGSIMDATA_SHOWBOTHOBSERVEDANDSIMULATIONRESULTS
@@ -3942,7 +3944,7 @@ BEGIN
         POPUP "NGSIM  Tools"
         BEGIN
             MENUITEM "Activate Space-Time View for Visualizing NGSIM Data", ID_NGSIMMENU_ACTIVATESPACE
-            MENUITEM "Load Vehicle Trajactory File", ID_TOOLS_LOADVEHICLETRAJACTORYFILE
+            MENUITEM "Load Vehicle Trajectory File", ID_TOOLS_LOADVEHICLETRAJECTORYFILE
             MENUITEM "Lane 1",                      ID_NGSIMDATA_LANE1
             MENUITEM "Lane 2",                      ID_NGSIMDATA_LANE2
             MENUITEM "Lane 3",                      ID_NGSIMDATA_LANE3
@@ -3954,6 +3956,7 @@ BEGIN
             MENUITEM "Show Vehicle ID",             ID_NGSIMDATA_SHOWVEHICLEID
             MENUITEM "Show Calculated Cumulative Flow Count and Density", ID_NGSIMMENU_SHOWCALCULATEDCUMULATIVEFLOWCOUNTANDDENSITY
             MENUITEM "Show Space-Time Density Contour", ID_NGSIMMENU_SHOWSPACETIME_CONTOUR
+			MENUITEM "Export Fundamental Diagram Stream Variables", ID_NGSIMMENU_EXPORT_FUNDAMENTAL_VARIABLES
             MENUITEM SEPARATOR
             MENUITEM "Export Data to Text File",    ID_NGSIMDATA_CARFOLLOWINGDATAEXTRACTION
             MENUITEM "Search by Vehicle ID",        ID_NGSIMDATA_SEARCH_BY_VEHICLE_ID
