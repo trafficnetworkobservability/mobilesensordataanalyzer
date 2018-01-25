@@ -640,6 +640,34 @@ int g_read_integer_with_special_character(FILE* f, bool speicial_char_handling, 
 
 }
 
+void string_split(std::vector<std::string>& results, const std::string &source, const int fields)
+{
+	results.clear();
+	results.resize(fields);
+
+	const char* s = source.c_str();
+	const char* s2;
+	int count;
+	int pos = 0;
+	while (pos < fields)
+	{
+		count = 0;
+		while (*s != '\0' && (*s == '\t' || *s == ' ' || *s == '\r')) s++;
+		if (*s == '\0')
+		{
+			break;
+		}
+		s2 = s;
+		while (*s2 != '\0' && *s2 != '\t' && *s2 != ' ' && *s2 != '\r')
+		{
+			s2++;
+			count++;
+		}
+		results[pos].assign(s, count);
+		s = s2;
+		pos++;
+	}
+};
 
 int g_read_integer(FILE* f, bool speicial_char_handling)
 // read an integer from the current pointer of the file, skip all spaces
