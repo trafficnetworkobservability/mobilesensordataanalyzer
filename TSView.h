@@ -417,6 +417,7 @@ public:
 
 	int Frame_ID;
 	int VehicleID;
+	int NGSIM_Vehicle_ID;
 
 	double LocalX;
 	double LocalY;
@@ -424,6 +425,7 @@ public:
 	float Speed_mph;
 	int VehicleClass;
 	float Acceleration;
+	float Spacing_meters;
 	int LaneID;
 	int PrecedingVehicleID;
 	int FollowingVehicleID;
@@ -439,7 +441,7 @@ protected: // create from serialization only
 public:
 
 	int m_DataCollectionTimeInternval_in_sec;
-
+	float m_DataCollectionSensorSpacing_in_feet; //sdzhao
 	CorridorSensorData m_CorridorSensorData;
 	CPoint m_TempLinkStartPoint, m_TempLinkEndPoint;
 	int m_SelectedVehicleCount; 
@@ -569,7 +571,14 @@ public:
 	}
 
 	int CountVehicles(int StartTime, int EndTime, float StartLocalY,float EndlocalY);
-	double CalculateSpaceMeanSpeed(int StartTime, int EndTime, LinkSensorData &element);
+	double CalculateSpaceMeanSpeedHarmonic(int StartTime, int EndTime, LinkSensorData &element);
+	double CalculateSpaceMeanSpeedElapsedTime(int iLink, int t, float DataCollectionSensorSpacing_in_feet, 
+		map<int, vector<map<int, int>>> & StartPassingTimeStampAtSensorIndex, 
+		map<int, vector<map<int, int>>> & EndPassingTimeStampAtSensorIndex,
+		float &edie_density);
+	double CalculateTimeMeanSpeed(int StartTime, int EndTime, LinkSensorData &element);
+
+
 	void HSVtoRGB( float *r, float *g, float *b, float h, float s, float v )
 {
 	int i;
@@ -692,7 +701,7 @@ void RefreshWindow();
 #endif
 
 protected:
-
+	void ReadNGSIMScenarioFile();
 	void ConstructCellBasedDensityProfile();
 	void ConstructCellBasedDensityProfile(float SensorSpacing, float boundary_offset, int data_collection_time_interval_in_sec);
 

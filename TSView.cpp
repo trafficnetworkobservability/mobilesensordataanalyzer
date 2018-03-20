@@ -1114,6 +1114,10 @@ void CTimeSpaceView::OnToolsLoadvehicletrajactoryfile()
 }
 #include <direct.h>
 #define GetCurrentDir _getcwd
+
+bool CompareByEntryTime(const VehicleSnapshotData &a, const VehicleSnapshotData &b) {
+	return a.Frame_ID < b.Frame_ID;
+};
 void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 {
 
@@ -1174,6 +1178,7 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 
 	std::vector<VehicleSnapshotData> OriginalDataVector;
 
+	vector<VehicleSnapshotData> Copy_OriginalDataVector;
 
 
 	CTime ExeStartTime = CTime::GetCurrentTime();
@@ -1198,6 +1203,13 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 
 	//sdzhao
 	map<int, float> out_laneno_max_acc;
+	map<int, int> out_laneno_first_veh_no;
+	map<int, map<int, ostringstream>> out_laneno_vehno_trajectory;
+	map<int, map<int, ostringstream>> out_laneno_vehno_entry_time;
+
+	map<int, map<int, int>> out_laneno_velocity_frequency;
+
+	map<int, double> min_frame_id;
 	map<int, float> out_laneno_min_acc;
 	map<int, float> out_laneno_max_velocity;
 	map<int, float> out_laneno_avg_headway;
@@ -1313,7 +1325,7 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 
 
 
-				//Spacing = stof(tokens[16]); //g_read_float(st); //17
+				Spacing = stof(tokens[16]); //g_read_float(st); //17
 
 				//Headway = stof(tokens[17]);  // g_read_float(st); //18
 
@@ -1342,15 +1354,41 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 						out_laneno_max_Local_Y[Lane_Identification] = 0.0;
 						out_laneno_max_acc[Lane_Identification] = -DBL_MAX;
 						out_laneno_min_acc[Lane_Identification] = DBL_MAX;
+						out_laneno_first_veh_no[Lane_Identification] = -1;
 						out_vehicle_entry_time[Lane_Identification] << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
+						
+						min_frame_id[Lane_Identification] = DBL_MAX;
+						//velocity frequency
+						out_laneno_velocity_frequency[Lane_Identification][0] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][1] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][2] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][3] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][4] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][5] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][6] = 0;
+						out_laneno_velocity_frequency[Lane_Identification][7] = 0;
 					}
 					out_vehicle_entry_time[Lane_Identification] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
-
+					
+					out_laneno_first_veh_no[Lane_Identification] = (Frame_ID < min_frame_id[Lane_Identification]) ? Vehicle_ID : out_laneno_first_veh_no[Lane_Identification];
+					min_frame_id[Lane_Identification] = (Frame_ID < min_frame_id[Lane_Identification]) ? Frame_ID : min_frame_id[Lane_Identification];
 				}
 				out_laneno_max_velocity[Lane_Identification] = max(out_laneno_max_velocity[Lane_Identification], Vehicle_Velocity*0.3048);
 				out_laneno_max_Local_Y[Lane_Identification] = max(out_laneno_max_Local_Y[Lane_Identification], Local_Y*0.3048);
 				out_laneno_min_acc[Lane_Identification] = min(out_laneno_min_acc[Lane_Identification], Vehicle_Acceleration*0.3048);
 				out_laneno_max_acc[Lane_Identification] = max(out_laneno_max_acc[Lane_Identification], Vehicle_Acceleration*0.3048);
+				
+				int velocity_index = (int) ((Vehicle_Velocity * 0.681818182) / 10);
+				out_laneno_velocity_frequency[Lane_Identification][velocity_index]++;
+
+				//output vehicle trajectories
+				out_laneno_vehno_trajectory[Lane_Identification][Vehicle_ID] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
+				if (Vehicle_ID != Prev_Vehicle_ID){
+					out_laneno_vehno_entry_time[Lane_Identification][Vehicle_ID] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
+
+				}
+				//
+				//
 				//out_laneno_avg_headway[Lane_Identification] += Headway;
 				//out_laneno_avg_spacing[Lane_Identification] += Spacing;
 				if (Vehicle_ID != Prev_Vehicle_ID && b_exclude_current_vehicle == false)
@@ -1371,7 +1409,7 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 					// 				out_laneno_min_acc[Lane_Identification] = min(out_laneno_min_acc[Lane_Identification], Vehicle_Acceleration*0.3048);
 					// 				out_laneno_max_acc[Lane_Identification] = max(out_laneno_max_acc[Lane_Identification], Vehicle_Acceleration*0.3048);
 
-
+				
 					m_NumberOfVehicles++;
 
 					m_VehicleIDtoNOMap[Vehicle_ID] = m_NumberOfVehicles;  // ID to sequential No.
@@ -1404,6 +1442,7 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 					for (int i = 0; i < current_vehicle_element_vector.size(); i++)
 					{
 						OriginalDataVector.push_back(current_vehicle_element_vector[i]);
+
 					}
 					current_vehicle_element_vector.clear();
 				}
@@ -1424,6 +1463,7 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 
 
 				VehicleSnapshotData element;
+				element.NGSIM_Vehicle_ID = Vehicle_ID;
 
 				element.VehicleID = m_NumberOfVehicles;
 
@@ -1439,12 +1479,12 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 				element.PrecedingVehicleID = Preceding_Vehicle;
 
 				element.FollowingVehicleID = Following_Vehicle;
-
-
-
+				element.Acceleration = Vehicle_Acceleration*0.3048; //mps
+				element.Spacing_meters = Spacing * 0.3048;
 				m_SelectLaneID = Lane_Identification;  // set Lane ID as a given number
 
 				//OriginalDataVector.push_back(element);
+				Copy_OriginalDataVector.push_back(element);
 
 				current_vehicle_element_vector.push_back(element);
 				prev_Frame_ID = Frame_ID;
@@ -1535,18 +1575,28 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 
 	for (auto &iter : out_vehicle_entry_time)
 	{
- 		ofstream f_veh_entry_time("NGSIM_vehicle_entry_time_" + to_string(iter.first) + ".csv", fstream::out);
- 		f_veh_entry_time << iter.second.str();
- 		f_veh_entry_time.close();
+//  		ofstream f_veh_entry_time("NGSIM_vehicle_entry_time_" + to_string(iter.first) + ".csv", fstream::out);
+//  		f_veh_entry_time << iter.second.str();
+// 		iter.second.str(""); //clear contents
+//  		f_veh_entry_time.close();
 
 		ofstream f_summary(summary_folder+"/NGSIM_summary_" + to_string(iter.first) + ".csv", fstream::out);
-		f_summary << "max velocity(mps)," << out_laneno_max_velocity[iter.first] << endl;
-		f_summary << "max velocity(kph)," << out_laneno_max_velocity[iter.first] * 3.6 << endl;
-		f_summary << "max position(meters)," << out_laneno_max_Local_Y[iter.first] << endl;
-		f_summary << "max acceleration(mps2)," << out_laneno_max_acc[iter.first] << endl;
-		f_summary << "min acceleration(mps2)," << out_laneno_min_acc[iter.first] << endl;
-		f_summary << "desired interval/Tao (seconds),"<< endl;
-		f_summary << "desired min spacing/d (meters)," << endl;
+		f_summary << "max velocity(mps)," << out_laneno_max_velocity[iter.first] << endl;			//1
+		f_summary << "max velocity(kph)," << out_laneno_max_velocity[iter.first] * 3.6 << endl;		//2
+		f_summary << "max position(meters)," << out_laneno_max_Local_Y[iter.first] << endl;			//3
+		f_summary << "max acceleration(mps2)," << out_laneno_max_acc[iter.first] << endl;			//4
+		f_summary << "min acceleration(mps2)," << out_laneno_min_acc[iter.first] << endl;			//5
+		f_summary << "first_vehicle_ID," << out_laneno_first_veh_no[iter.first] << endl;			//6
+		f_summary << "desired interval/Tao (seconds),"<< endl;										//7
+		f_summary << "desired min spacing/d (meters)," << endl;										//8
+		f_summary << "Count of Velocity(0~10 mph)," << out_laneno_velocity_frequency[Lane_Identification][0] << endl;
+		f_summary << "Count of Velocity(10~20 mph)," << out_laneno_velocity_frequency[Lane_Identification][1] << endl;
+		f_summary << "Count of Velocity(20~30 mph)," << out_laneno_velocity_frequency[Lane_Identification][2] << endl;
+		f_summary << "Count of Velocity(30~40 mph)," << out_laneno_velocity_frequency[Lane_Identification][3] << endl;
+		f_summary << "Count of Velocity(40~50 mph)," << out_laneno_velocity_frequency[Lane_Identification][4] << endl;
+		f_summary << "Count of Velocity(50~60 mph)," << out_laneno_velocity_frequency[Lane_Identification][5] << endl;
+		f_summary << "Count of Velocity(60~70 mph)," << out_laneno_velocity_frequency[Lane_Identification][6] << endl;
+		f_summary << "Count of Velocity(70+ mph)," << out_laneno_velocity_frequency[Lane_Identification][7] << endl;
 		//f_summary << "average headway (seconds)," << out_laneno_avg_headway[iter.first] << endl;
 		//f_summary << "average spacing (meters)," << out_laneno_avg_spacing[iter.first] * 0.3048 << endl;
 		f_summary.close();
@@ -1557,7 +1607,112 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 
 	m_VehicleSnapshotAry	= AllocateDynamicArray<VehicleSnapshotData>(m_NumberOfVehicles,m_NumberOfTimeSteps+1);
 
+	map<int, vector<VehicleSnapshotData>> lane_no_first_25_vehs;
 
+	for (unsigned i = 0; i < Copy_OriginalDataVector.size(); i++) //Copy_OriginalDataVector
+	{
+		VehicleSnapshotData element = Copy_OriginalDataVector[i];
+		//
+		int id = element.NGSIM_Vehicle_ID;
+		auto pred = [id](const VehicleSnapshotData & item) {
+			return item.NGSIM_Vehicle_ID == id;
+		};
+		if (std::find_if(std::begin(lane_no_first_25_vehs[element.LaneID]), std::end(lane_no_first_25_vehs[element.LaneID]), pred) == std::end(lane_no_first_25_vehs[element.LaneID])){
+			lane_no_first_25_vehs[element.LaneID].push_back(element);
+		}
+		//
+		////sdzhao export first vehicle trajectory
+		if (out_laneno_first_veh_no[element.LaneID] == element.NGSIM_Vehicle_ID){
+			out_vehicle_entry_time[element.LaneID]
+				<< element.NGSIM_Vehicle_ID << ","
+				<< element.Frame_ID << ","
+				<< element.Speed_mph * 0.44704 << ","	//mps
+				<< element.Acceleration << ","			//mps2
+				<< element.LocalY *0.3048 << endl;      //meters
+		}
+	}
+
+	for (auto &iter : lane_no_first_25_vehs){
+		vector<VehicleSnapshotData>& vec = iter.second;
+		sort(vec.begin(), vec.end(), CompareByEntryTime);
+		vec.erase(vec.begin() + 25, vec.end());
+
+		ofstream f_traj_time("NGSIM_1_25_vehicle_entrytime_" + to_string(iter.first) + ".csv", fstream::out);
+		for (int i = 0; i < 24; i++){
+			f_traj_time << vec[i].NGSIM_Vehicle_ID << ","
+				<< vec[i].Frame_ID << ","
+				<< vec[i].Speed_mph * 0.44704 << ","	//mps
+				<< vec[i].Acceleration << ","			//mps2
+				<< vec[i].LocalY *0.3048 << endl;      //meters
+		}
+		f_traj_time.close();
+	}
+	map<int, vector<VehicleSnapshotData>> lane_no_first_25_vehs_traj;
+	for (unsigned i = 0; i < Copy_OriginalDataVector.size(); i++) //Copy_OriginalDataVector
+	{
+		VehicleSnapshotData element = Copy_OriginalDataVector[i];
+		vector<VehicleSnapshotData>& vec = lane_no_first_25_vehs[element.LaneID];
+		//if (vec.find(element.))
+		int id = element.NGSIM_Vehicle_ID;
+		auto pred = [id](const VehicleSnapshotData & item) {
+			return item.NGSIM_Vehicle_ID == id;
+		};
+		if (std::find_if(std::begin(vec), std::end(vec), pred) != std::end(vec)){
+
+			lane_no_first_25_vehs_traj[element.LaneID].push_back(element);
+		}
+	}
+
+	for (auto &iter : lane_no_first_25_vehs_traj){
+		ofstream f_traj_time("NGSIM_1_25_vehicle_trajectory_" + to_string(iter.first) + ".csv", fstream::out);
+		vector<VehicleSnapshotData>& vec = iter.second;
+		for (int i = 0; i < vec.size(); i++){
+			f_traj_time << vec[i].NGSIM_Vehicle_ID << ","
+				<< vec[i].Frame_ID << ","
+				<< vec[i].Speed_mph * 0.44704 << ","	//mps
+				<< vec[i].Acceleration << ","			//mps2
+				<< vec[i].LocalY *0.3048 <<","
+				<< vec[i].Spacing_meters << endl;      //meters
+		}
+		f_traj_time.close();
+	}
+
+	for (auto &lane : out_laneno_vehno_entry_time){
+		int num_vehs_per_lane = lane.second.size();
+		int veh_index = 0;
+		ofstream f_veh_entry_time("NGSIM_vehicle_entry_time_" + to_string(lane.first) + ".csv", fstream::out);
+		f_veh_entry_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
+		ofstream f_veh_traj_time("NGSIM_shockwave_vehicle_trajectory_" + to_string(lane.first) + ".csv", fstream::out);
+		f_veh_traj_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
+		int num_front_vehs = 14;
+		for (auto &veh : lane.second){
+// 			if (veh_index >= num_vehs_per_lane - 90 - num_front_vehs && veh_index <= num_vehs_per_lane - 90)//if (veh_index >= num_vehs_per_lane - 90 && veh_index <= num_vehs_per_lane - 90+5)
+// 			{
+// 				f_veh_traj_time << veh.second.str();
+// 			}
+			if (veh_index >= num_vehs_per_lane - 90 - num_front_vehs && veh_index <= num_vehs_per_lane - 90 + 5)
+			{
+				f_veh_traj_time << out_laneno_vehno_trajectory[lane.first][veh.first].str();
+				f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
+			}
+			else if (veh_index > num_vehs_per_lane - 90 && veh_index <= num_vehs_per_lane - 90 + 5)
+				f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
+
+			veh_index++;
+		}
+		f_veh_entry_time.close();
+		f_veh_traj_time.close();
+	}
+
+	//
+// 	for (auto &iter : out_vehicle_entry_time)
+// 	{
+// 		ofstream f_veh_traj_time("NGSIM_first_vehicle_trajectory_" + to_string(iter.first) + ".csv", fstream::out);
+// 		f_veh_traj_time << iter.second.str();
+// 		iter.second.str(""); //clear contents
+// 		f_veh_traj_time.close();
+// 	}
+	//
 
 	for(unsigned i  = 0; i < OriginalDataVector.size(); i++)
 
@@ -1575,17 +1730,22 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 		m_VehicleSnapshotAry [element.VehicleID ] [element.Frame_ID].PrecedingVehicleID =  element.PrecedingVehicleID;
 
 		m_VehicleSnapshotAry [element.VehicleID ] [element.Frame_ID].FollowingVehicleID  =  element.FollowingVehicleID;
-
+		
 	}
+	
+
+
 
 	m_TimeLeft = 0;
 	m_TimeRight = m_NumberOfTimeSteps;
 
+	//read NGSIM scenario to get time interval and sensor spacing
 
 	//ConstructCellBasedDensityProfile();
-	float SensorSpacing = 200;
+	ReadNGSIMScenarioFile();
+	float SensorSpacing = m_DataCollectionSensorSpacing_in_feet; // 200;
 	float boundary_offset = 50;
-	int data_collection_time_interval_in_sec = 30;
+	int data_collection_time_interval_in_sec = m_DataCollectionTimeInternval_in_sec;	//= 30;
 	
 	ConstructCellBasedDensityProfile(SensorSpacing, boundary_offset, data_collection_time_interval_in_sec);
 
@@ -1907,9 +2067,9 @@ void CTimeSpaceView::OnNgsimdataLane1()
 
 	map<float, map<int, float>> Distance_Time_Value;
 	float sensor_spacing = 100;
-	Output_NGSIM_Matrix("cumulative_count", sensor_spacing, Distance_Time_Value);
+	//Output_NGSIM_Matrix("cumulative_count", sensor_spacing, Distance_Time_Value);
 	int display_resolution = 1; //30
-	Output_NGSIM_Individual_Vehicle_Trajectory(display_resolution, m_PlotRectNGSIM, Distance_Time_Value);
+	//Output_NGSIM_Individual_Vehicle_Trajectory(display_resolution, m_PlotRectNGSIM, Distance_Time_Value);
 	//Output_NGSIM_Matrix("cumulative_count");
 }
 
@@ -1917,7 +2077,7 @@ void CTimeSpaceView::OnNgsimdataLane2()
 {
 	m_SelectLaneID  = 2;
 	Invalidate();
-	Output_NGSIM_Matrix("cumulative_count");
+	//Output_NGSIM_Matrix("cumulative_count");
 	//Output_NGSIM_Individual_Vehicle_Trajectory(1);
 }
 
@@ -1925,35 +2085,35 @@ void CTimeSpaceView::OnNgsimdataLane3()
 {
 	m_SelectLaneID  = 3;
 	Invalidate();
-	Output_NGSIM_Matrix("cumulative_count");
+	//Output_NGSIM_Matrix("cumulative_count");
 }
 
 void CTimeSpaceView::OnNgsimdataLane4()
 {
 	m_SelectLaneID  = 4;
 	Invalidate();
-	Output_NGSIM_Matrix("cumulative_count");
+	//Output_NGSIM_Matrix("cumulative_count");
 }
 
 void CTimeSpaceView::OnNgsimdataLane5()
 {
 	m_SelectLaneID  = 5;
 	Invalidate();
-	Output_NGSIM_Matrix("cumulative_count");
+	//Output_NGSIM_Matrix("cumulative_count");
 }
 
 void CTimeSpaceView::OnNgsimdataLane6()
 {
 	m_SelectLaneID  = 6;
 	Invalidate();
-	Output_NGSIM_Matrix("cumulative_count");
+	//Output_NGSIM_Matrix("cumulative_count");
 }
 
 void CTimeSpaceView::OnNgsimdataLane7()
 {
 	m_SelectLaneID  = 7;
 	Invalidate();
-	Output_NGSIM_Matrix("cumulative_count");
+	//Output_NGSIM_Matrix("cumulative_count");
 }
 
 void CTimeSpaceView::OnNgsimdataColorspeed()
@@ -2559,7 +2719,7 @@ int CTimeSpaceView::CountVehicles(int SelectedStartTime, int SelectedEndTime, fl
 	return m_SelectedVehicleCount;
 }
 
-double CTimeSpaceView::CalculateSpaceMeanSpeed(int StartTime, int EndTime, LinkSensorData &element){
+double CTimeSpaceView::CalculateSpaceMeanSpeedHarmonic(int StartTime, int EndTime, LinkSensorData &element){
 	int totoal_num_vehicles = 0;
 	double sum_spd_inverse = 0.0;
 	for (int t = StartTime; t < EndTime; t++){
@@ -2570,6 +2730,49 @@ double CTimeSpaceView::CalculateSpaceMeanSpeed(int StartTime, int EndTime, LinkS
 		}
 	}
 	return  ((double)totoal_num_vehicles)  / sum_spd_inverse;		//mph
+};
+
+double CTimeSpaceView::CalculateSpaceMeanSpeedElapsedTime(int iLink, int t, float DataCollectionSensorSpacing_in_feet, 
+	map<int, vector<map<int, int>>> & StartPassingTimeStampAtSensorIndex,
+	map<int, vector<map<int, int>>> & EndPassingTimeStampAtSensorIndex,
+	float &edie_density){
+	double avg_ElapsedTime = 0.0;
+	int ctr = 0;
+	for (auto &iter : StartPassingTimeStampAtSensorIndex[iLink][t]){
+		int v_index = iter.first;
+		if (EndPassingTimeStampAtSensorIndex[iLink][t].find(v_index) != EndPassingTimeStampAtSensorIndex[iLink][t].end())
+		{
+			double ElapsedTime = EndPassingTimeStampAtSensorIndex[iLink][t][v_index] - StartPassingTimeStampAtSensorIndex[iLink][t][v_index];
+			avg_ElapsedTime += ElapsedTime;
+			ctr++;
+		}
+
+	}
+
+	
+	if (ctr == 0){
+		return -1;
+	}
+	else
+	{
+		edie_density = (avg_ElapsedTime / 10) / (m_DataCollectionTimeInternval_in_sec * (DataCollectionSensorSpacing_in_feet / 5280));
+		avg_ElapsedTime /= ctr;
+		return (DataCollectionSensorSpacing_in_feet / 5280) / (avg_ElapsedTime / 36000);
+	}
+	
+};
+
+double CTimeSpaceView::CalculateTimeMeanSpeed(int StartTime, int EndTime, LinkSensorData &element){
+	int totoal_num_vehicles = 0;
+	double sum_spd = 0.0;
+	for (int t = StartTime; t < EndTime; t++){
+		int num_vehs = element.observed_spd_within_sensor_time_rectangle[t].size();
+		totoal_num_vehicles += num_vehs;
+		for (int v = 0; v < num_vehs; v++){
+			sum_spd += element.observed_spd_within_sensor_time_rectangle[t][v];
+		}
+	}
+	return  sum_spd / (double)totoal_num_vehicles;		//mph
 };
 
 void CTimeSpaceView::OnKeyDown(UINT nChar, UINT nRepCnt, UINT nFlags)
@@ -2674,6 +2877,112 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile()
 }
 void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float boundary_offset, int data_collection_time_interval_in_sec)
 {
+	//sdzhao test StartLocalYLane and EndLocalYLane
+
+	if (m_NumberOfTimeSteps == 0)
+		m_NumberOfTimeSteps = 1440;
+	m_NumberOfVehicles_lane = m_NumberOfTimeSteps / 20;
+
+	m_VehicleSnapshotAry_Lane = Allocate3DDynamicArray<float>(_MAX_LANE_SIZE, m_NumberOfVehicles_lane, m_NumberOfTimeSteps + 1);
+
+	m_VehicleStartTimeAry_Lane = AllocateDynamicArray<int>(_MAX_LANE_SIZE, m_NumberOfVehicles_lane);
+	m_VehicleEndTimeAry_Lane = AllocateDynamicArray<int>(_MAX_LANE_SIZE, m_NumberOfVehicles_lane);
+
+	float FirstTimeStamp = 999999;
+	int FirstVehicleID = 0;
+	for (int v = 0; v < m_NumberOfVehicles; v += 1)
+	{
+		for (int t = m_VehicleDataList[v].StartTime; t <= m_VehicleDataList[v].EndTime; t += 1)
+		{
+			if (m_VehicleSnapshotAry[v][t].LaneID == m_SelectLaneID)  //LaneID starts from 0
+			{
+				if (t < FirstTimeStamp)
+				{
+					FirstTimeStamp = t;
+					FirstVehicleID = v;
+
+				}
+			}
+
+		}
+	}
+	StartTimeLane[m_SelectLaneID] = -1;
+	EndTimeLane[m_SelectLaneID] = -1;
+
+	for (int t = m_VehicleDataList[FirstVehicleID].StartTime; t <= m_VehicleDataList[FirstVehicleID].EndTime; t += 1)
+	{
+
+		if (StartTimeLane[m_SelectLaneID] != -1 && m_VehicleSnapshotAry[FirstVehicleID][t].LaneID != m_SelectLaneID)
+		{
+			break; // switch to another link!
+		}
+
+		if (m_VehicleSnapshotAry[FirstVehicleID][t].LaneID == m_SelectLaneID)  //LaneID starts from 0
+		{
+
+			if (StartTimeLane[m_SelectLaneID] == -1) // has not been initialized
+			{
+				StartTimeLane[m_SelectLaneID] = t;
+				StartLocalYLane[m_SelectLaneID] = m_VehicleSnapshotAry[FirstVehicleID][t].LocalY;
+			}
+
+			EndTimeLane[m_SelectLaneID] = t;  // keep assinging time stamp value
+			EndLocalYLane[m_SelectLaneID] = m_VehicleSnapshotAry[FirstVehicleID][t].LocalY;
+
+			// record trajactory for the first vehicle
+			m_VehicleSnapshotAry_Lane[m_SelectLaneID][0][t] = m_VehicleSnapshotAry[FirstVehicleID][t].LocalY;
+			// simulated data array (lane by lane)     original data array
+
+		}
+	}
+
+	// set up the position for upstream and downstream (single) loop detectors, can be extended to double loops
+	StartLocalYLane[m_SelectLaneID] += 50.0f; // move up by 50 feet
+	EndLocalYLane[m_SelectLaneID] -= 50.0f; // move down by 50 feet
+
+	// find passing time stamps of vehicles
+
+	std::vector<int> StartPassingTimeStamp;
+	std::vector<int> EndPassingTimeStamp;
+
+	for (int v = 0; v < m_NumberOfVehicles; v += 1)
+	{
+		for (int t = m_VehicleDataList[v].StartTime; t < m_VehicleDataList[v].EndTime; t += 1)
+		{
+			if (m_VehicleSnapshotAry[v][t].LaneID == m_SelectLaneID)  //LaneID starts from 0
+			{
+
+				if (m_VehicleSnapshotAry[v][t].LocalY <= StartLocalYLane[m_SelectLaneID] && StartLocalYLane[m_SelectLaneID] < m_VehicleSnapshotAry[v][t + 1].LocalY)
+				{
+					StartPassingTimeStamp.push_back(t);
+				}
+
+				if (m_VehicleSnapshotAry[v][t].LocalY <= EndLocalYLane[m_SelectLaneID] && EndLocalYLane[m_SelectLaneID] < m_VehicleSnapshotAry[v][t + 1].LocalY)
+				{
+					EndPassingTimeStamp.push_back(t);
+				}
+
+			}
+
+		}
+	}
+
+	std::sort(StartPassingTimeStamp.begin(), StartPassingTimeStamp.end(), compare_timestamp);
+	std::sort(EndPassingTimeStamp.begin(), EndPassingTimeStamp.end(), compare_timestamp);
+
+	// here we assume the first leader vehicle is 0
+
+	VehicleSizeLane[m_SelectLaneID] = min(StartPassingTimeStamp.size(), EndPassingTimeStamp.size());
+	for (int v = 0; v < VehicleSizeLane[m_SelectLaneID]; v++)  // 1 starts from the first follower.
+	{
+		m_VehicleStartTimeAry_Lane[m_SelectLaneID][v] = StartPassingTimeStamp[v];
+		m_VehicleEndTimeAry_Lane[m_SelectLaneID][v] = EndPassingTimeStamp[v];
+		TRACE("no.%d, %d, %d\n", v, StartPassingTimeStamp[v], EndPassingTimeStamp[v]);
+	}
+
+	//
+
+
 	//float SensorSpacing = 300.0f;  // 0.1 mile
 	// step 1: point sensor data
 
@@ -2701,8 +3010,12 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float
 						StartPassingTimeStamp.push_back(t);
 						//sdzhao get observed speed from file
 						observed_spd_within_sensor_time_rectangle[t].push_back(m_VehicleSnapshotAry[v][t].Speed_mph);
+						//sdzhao: get elapsed time of vehicles 
+						
+						//double elapsed_time = m_VehicleEndTimeAry_Lane[m_SelectLaneID][v] - m_VehicleStartTimeAry_Lane[m_SelectLaneID][v];
 					}
 				}
+				//StartLocalYLane;
 			}
 		}
 		if (!StartPassingTimeStamp.size())
@@ -2731,18 +3044,57 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float
 
 	m_CorridorSensorData.CreateLinkSensorDataFromPointSensorVector();
 	ostringstream &ostr = m_CorridorSensorData.out_FD_variables;
-	ostr << "Sensor,time,density(veh/mile),space_mean_speed(mph),flow(veh/hour)" << endl;
+	ostr << "Sensor,time,Instantaneous_density(veh/mile),Edie_definition_density(veh/mile),Point_harmonic_speed(mph),Time_mean_speed(mph),total_distance_time_harmonic_speed(mph),obserbed_flow(veh/hour),Point_harmonic_flow(veh/hour),Time_mean_flow(veh/hour),total_distance_time_harmonic__flow(veh/hour)" << endl;
 	//step 3: scan image to count vehicles
+	//
+	map<int, vector<map<int,int>>> StartPassingTimeStampAtSensorIndex_VehIndex;
+	
+	map<int, vector<map<int, int>>> EndPassingTimeStampAtSensorIndex_VehIndex;
+	
+	//
 	for (int iLink = 0; iLink < m_CorridorSensorData.LinkSensorDataVector.size(); iLink++)
 	{
+		
+
+		double ilink_sensor_local_y_endpoint = m_CorridorSensorData.LinkSensorDataVector[iLink].DetectorLocalY_Downstream;
+		double ilink_sensor_local_y_startpoint = m_CorridorSensorData.LinkSensorDataVector[iLink].DetectorLocalY_Upstream;
 
 		LinkSensorData element = m_CorridorSensorData.LinkSensorDataVector[iLink];
+		StartPassingTimeStampAtSensorIndex_VehIndex[iLink].resize(element.SpaceScanCountVector.size());
+		EndPassingTimeStampAtSensorIndex_VehIndex[iLink].resize(element.SpaceScanCountVector.size());
+		//
+		for (int v = 0; v < m_NumberOfVehicles; v += 1)
+		{
+			//
+			
+			for (int t = m_VehicleDataList[v].StartTime; t<m_VehicleDataList[v].EndTime; t += 1)
+			{			
+				int t_id = (t / 10) / element.DataCollectionTimeInterval_in_sec;
+				if (t_id > element.SpaceScanCountVector.size() - 1)
+					continue; 
+				//bool start_valid = false, end_valid = false;
+
+				if (m_VehicleSnapshotAry[v][t].LocalY <= ilink_sensor_local_y_startpoint&& ilink_sensor_local_y_startpoint < m_VehicleSnapshotAry[v][t + 1].LocalY)
+				{
+					StartPassingTimeStampAtSensorIndex_VehIndex[iLink][t_id][v] = t; //.push_back(t);
+	
+				}
+
+				if (m_VehicleSnapshotAry[v][t].LocalY <= ilink_sensor_local_y_endpoint  &&  ilink_sensor_local_y_endpoint< m_VehicleSnapshotAry[v][t + 1].LocalY)
+				{//
+					EndPassingTimeStampAtSensorIndex_VehIndex[iLink][t_id][v] = t;// .push_back(t);				
+				}
+
+			}
+		}
+		//
+
 		for (int t = 0; t < element.SpaceScanCountVector.size(); t++)
 		{
 			int timestamp = t* element.DataCollectionTimeInterval_in_sec * 10;
 			int count = CountVehicles(timestamp, timestamp, element.DetectorLocalY_Downstream, element.DetectorLocalY_Upstream);
 			//sdzhao
-			double space_mean_speed = CalculateSpaceMeanSpeed(timestamp, timestamp, element);
+			double space_mean_speed = CalculateSpaceMeanSpeedHarmonic(timestamp, timestamp, element);
 			int end_timestamp = (t+1)* element.DataCollectionTimeInterval_in_sec * 10;
 			double avg_rect_vehicle_count = 0.0;// CountVehicles(timestamp, end_timestamp, element.DetectorLocalY_Downstream, element.DetectorLocalY_Upstream);
 			for (int tt = timestamp; tt < end_timestamp; tt++){
@@ -2750,8 +3102,23 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float
 			}
 			avg_rect_vehicle_count = avg_rect_vehicle_count / (end_timestamp - timestamp);
 
-			double rect_space_mean_speed = CalculateSpaceMeanSpeed(timestamp, end_timestamp, element);
-		
+			double point_harmonic_speed = CalculateSpaceMeanSpeedHarmonic(timestamp, end_timestamp, element);
+			
+			//
+			double time_mean_spd = CalculateTimeMeanSpeed(timestamp, end_timestamp, element);
+			float sensor_spacing = m_DataCollectionSensorSpacing_in_feet;
+			float edie_density = -1.0;
+			double total_dist_time_harmonic_speed = CalculateSpaceMeanSpeedElapsedTime(iLink, t, sensor_spacing, StartPassingTimeStampAtSensorIndex_VehIndex, EndPassingTimeStampAtSensorIndex_VehIndex, edie_density);
+// 			double avg_ElapsedTime = 0.0;
+// 			for (int vi = 0; vi < StartPassingTimeStampAtSensorIndex[iLink][t].size(); vi++){
+// 			
+// 				double ElapsedTime = EndPassingTimeStampAtSensorIndex[iLink][t][vi] - StartPassingTimeStampAtSensorIndex[iLink][t][vi];
+// 				avg_ElapsedTime += ElapsedTime;
+// 			}
+// 			avg_ElapsedTime /= StartPassingTimeStampAtSensorIndex[iLink][t].size();
+// 			double space_mean_speed_elapsed_time = (m_DataCollectionSensorSpacing_in_feet / 5280 )/ (avg_ElapsedTime / 36000);
+			//
+
 
 			m_CorridorSensorData.LinkSensorDataVector[iLink].SpaceScanCountVector[t] = count;
 			if (count)
@@ -2759,21 +3126,28 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float
 
 			m_CorridorSensorData.LinkSensorDataVector[iLink].DensityVector[t] = count*1.0 / element.DetectorSpacing_in_miles;
 
+			float obserbed_flow = element.GetFlowCount(timestamp/10) * (3600 / m_DataCollectionTimeInternval_in_sec);
 			double rect_density = m_CorridorSensorData.LinkSensorDataVector[iLink].DensityVector[t];
-			double avg_rect_density = avg_rect_vehicle_count*1.0 / element.DetectorSpacing_in_miles;
-			double rect_flow = rect_space_mean_speed * rect_density;
-			double avg_rect_flow = avg_rect_density * rect_space_mean_speed;
-			if (avg_rect_flow > 0.0){
+			double instantaneous_avg_rect_density = avg_rect_vehicle_count*1.0 / element.DetectorSpacing_in_miles;
+			double rect_flow = point_harmonic_speed * rect_density;
+			double point_harmonic_flow = instantaneous_avg_rect_density * point_harmonic_speed;
+			if (point_harmonic_flow > 0.0){
 				ostr << iLink << ","
-					<< t << "," 
-					//<< count << "," 
+					<< t << ","
 					//<< avg_rect_vehicle_count << ","
-					<< avg_rect_density << ","
-					<< rect_space_mean_speed << "," 
+					<< instantaneous_avg_rect_density << ","
+					<< ((edie_density < 0.0 || edie_density > 280.0) ? " " : to_string(edie_density)) << ","
+					<< point_harmonic_speed << ","
+					<< time_mean_spd << ","
+					<< ((total_dist_time_harmonic_speed < 0.0 || total_dist_time_harmonic_speed > 65.0) ? " " : to_string(total_dist_time_harmonic_speed)) << ","
 					//<< space_mean_speed << "," 
 					//<< rect_density << ","			
 					//<< rect_flow  << ","
-					<< avg_rect_flow << endl;
+					//<< count * (3600 / m_DataCollectionTimeInternval_in_sec) << ","
+					<< obserbed_flow << ","
+					<< point_harmonic_flow << ","
+					<< time_mean_spd*instantaneous_avg_rect_density << ","
+					<< ((total_dist_time_harmonic_speed < 0.0 || total_dist_time_harmonic_speed > 65.0) ? " " : to_string(total_dist_time_harmonic_speed*instantaneous_avg_rect_density)) << endl;
 			}
 		}
 
@@ -2796,6 +3170,8 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float
 				{
 					PassingTimeStamp.push_back(t);
 				}
+
+
 			}
 		}
 	}
@@ -2809,6 +3185,33 @@ void CTimeSpaceView::ConstructCellBasedDensityProfile(float SensorSpacing, float
 
 	//Output_NGSIM_Matrix("cumulative_count");
 }
+
+void CTimeSpaceView::ReadNGSIMScenarioFile(){
+	ifstream NGSIM_scenario("NGSIM_Scenario.csv", fstream::in);
+	string line;
+	if (NGSIM_scenario.is_open()){
+		int iline = 0;
+		vector<string> tokens;
+		while (NGSIM_scenario.good())
+		{
+			getline(NGSIM_scenario, line);
+			iline = iline + 1;
+			if (line != ""){
+				string_split(tokens, line, ",");
+				if (iline == 1)
+				{
+					m_DataCollectionTimeInternval_in_sec = stoi(tokens[1]);
+				}
+				else if (iline == 2)
+				{
+					m_DataCollectionSensorSpacing_in_feet = stoi(tokens[1]);
+				}
+			}
+		}
+		NGSIM_scenario.close();
+	}
+};
+
 void CTimeSpaceView::OnNgsimmenuExportcumulativeflowcountdata()
 {
 	ConstructCellBasedDensityProfile();

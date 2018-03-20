@@ -652,13 +652,13 @@ void string_split(std::vector<std::string>& results, const std::string &source, 
 	while (pos < fields)
 	{
 		count = 0;
-		while (*s != '\0' && (*s == '\t' || *s == ' ' || *s == '\r')) s++;
+		while (*s != '\0' && (*s == '\t' || *s == ' ' || *s == '\r' || *s == ',')) s++;
 		if (*s == '\0')
 		{
 			break;
 		}
 		s2 = s;
-		while (*s2 != '\0' && *s2 != '\t' && *s2 != ' ' && *s2 != '\r')
+		while (*s2 != '\0' && *s2 != '\t' && *s2 != ' ' && *s2 != '\r' && *s2 != ',')
 		{
 			s2++;
 			count++;

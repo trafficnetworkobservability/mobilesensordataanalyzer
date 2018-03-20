@@ -207,7 +207,7 @@
     </ResourceCompile>
     <Link>
       <AdditionalDependencies>opengl32.lib;gdal_i.lib;%(AdditionalDependencies)</AdditionalDependencies>
-      <OutputFile>C:\NEXTA_DTALite_SoftwareRelease\NEXTA_64.exe</OutputFile>
+      <OutputFile>C:\MOBILE_SENSOR_DATA_ANALYZER_SoftwareRelease\MOBILE_SENSOR_DATA_ANALYZER_64.exe</OutputFile>
       <Version />
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <SubSystem>Windows</SubSystem>

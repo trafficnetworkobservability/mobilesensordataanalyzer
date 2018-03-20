@@ -25,6 +25,7 @@ void CDlg_NEXTA_Configuration::DoDataExchange(CDataExchange* pDX)
 {
 	CDialog::DoDataExchange(pDX);
 	DDX_Control(pDX, IDC_COMBO_Side_Driving, m_Side_Driving_Combo);
+
 }
 
 

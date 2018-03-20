@@ -4623,6 +4623,10 @@ BEGIN
     DEFPUSHBUTTON   "OK",IDOK,199,157,50,14
     PUSHBUTTON      "Cancel",IDCANCEL,253,157,50,14
     COMBOBOX        IDC_COMBO_Side_Driving,17,14,105,42,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+// 	LTEXT           "Data collection time interval:", IDC_STATIC, 17, 34, 105, 42
+// 	EDITTEXT        IDC_EDIT_NGSIM_Time_Interval, 120, 32, 30, 15, ES_AUTOHSCROLL
+// 	LTEXT           "Data collection sensor interval:", IDC_STATIC, 17, 64, 105, 42
+// 	EDITTEXT        IDC_EDIT_NGSIM_Sensor_Interval, 120, 62, 30, 15, ES_AUTOHSCROLL
 END
 
 

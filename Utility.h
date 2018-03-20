@@ -27,32 +27,32 @@
 #include <math.h>
 
 void string_split(std::vector<std::string>& results, const std::string &source, const int fields);
-// 
-// enum empties_t { empties_ok, no_empties };
-// template <typename Container>
-// Container& string_split(
-// 	Container&                            result,
-// 	const typename Container::value_type& s,
-// 	const typename Container::value_type& delimiters,
-// 	empties_t                      empties = empties_ok)
-// {
-// 	result.clear();
-// 	size_t current;
-// 	size_t next = -1;
-// 	do
-// 	{
-// 		if (empties == no_empties)
-// 		{
-// 			next = s.find_first_not_of(delimiters, next + 1);
-// 			if (next == Container::value_type::npos) break;
-// 			next -= 1;
-// 		}
-// 		current = next + 1;
-// 		next = s.find_first_of(delimiters, current);
-// 		result.push_back(s.substr(current, next - current));
-// 	} while (next != Container::value_type::npos);
-// 	return result;
-// };
+
+enum empties_t { empties_ok, no_empties };
+template <typename Container>
+Container& string_split(
+	Container&                            result,
+	const typename Container::value_type& s,
+	const typename Container::value_type& delimiters,
+	empties_t                      empties = empties_ok)
+{
+	result.clear();
+	size_t current;
+	size_t next = -1;
+	do
+	{
+		if (empties == no_empties)
+		{
+			next = s.find_first_not_of(delimiters, next + 1);
+			if (next == Container::value_type::npos) break;
+			next -= 1;
+		}
+		current = next + 1;
+		next = s.find_first_of(delimiters, current);
+		result.push_back(s.substr(current, next - current));
+	} while (next != Container::value_type::npos);
+	return result;
+};
 
 int g_read_integer(FILE* f, bool speicial_char_handling=false);
 int g_read_integer_with_special_character(FILE* f, bool speicial_char_handling, char special_ch);
