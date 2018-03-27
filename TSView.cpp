@@ -192,11 +192,17 @@ CTLiteDoc* CTimeSpaceView::GetTLDocument()
 
 void CTimeSpaceView::OnDraw(CDC* pDC)
 {
-	if(m_bLoadedDataFlag == false)
+	if (m_bLoadedDataFlag == false)
 	{
-		m_bLoadedDataFlag = true;	
-		OnToolsLoadvehicletrajactoryfile();
-
+		m_bLoadedDataFlag = true;
+		if (((CTLiteApp*)AfxGetApp())->m_bLoadedDataFromVissim)
+		{
+			OnToolsLoadvehicletrajactoryfileFromVissim(((CTLiteApp*)AfxGetApp())->m_metric);
+		}
+		else
+		{
+			OnToolsLoadvehicletrajactoryfile();
+		}
 	}
 	CRect rectClient(0,0,0,0);
 	GetClientRect(&rectClient);
@@ -1112,6 +1118,35 @@ void CTimeSpaceView::OnToolsLoadvehicletrajactoryfile()
 
 	AfxMessageBox(str_running_time, MB_ICONINFORMATION);
 }
+
+void CTimeSpaceView::OnToolsLoadvehicletrajactoryfileFromVissim(bool unit)
+{
+	
+	static char BASED_CODE szFilter[] = "VISSIM Vehicle Trajectory File (*.fzp)|*.fzp||";
+
+	CFileDialog dlg(TRUE, 0, 0, OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT, szFilter);
+
+	std::vector<VehicleSnapshotData> OriginalDataVector;
+
+	CTime ExeStartTime = CTime::GetCurrentTime();
+
+	if (dlg.DoModal() == IDOK)
+	{
+		LoadVehicleTrajectoryFileFromVissim(dlg.GetPathName(), unit);
+	}
+
+	CTime ExeEndTime = CTime::GetCurrentTime();
+
+	CTimeSpan ts = ExeEndTime - ExeStartTime;
+
+	CString str_running_time;
+
+	str_running_time.Format("Load %d vehicles from the vehicle trajectory file.\nLoading Time: %d hour %d min %d sec. \n",
+		m_NumberOfVehicles, ts.GetHours(), ts.GetMinutes(), ts.GetSeconds());
+
+	AfxMessageBox(str_running_time, MB_ICONINFORMATION);
+}
+
 #include <direct.h>
 #define GetCurrentDir _getcwd
 
@@ -1749,6 +1784,471 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 	
 	ConstructCellBasedDensityProfile(SensorSpacing, boundary_offset, data_collection_time_interval_in_sec);
 
+}
+
+void CTimeSpaceView::LoadVehicleTrajectoryFileFromVissim(CString file_name, bool metric)
+{
+	int Vehicle_ID; //1 p
+	int Frame_ID;//2
+	int Total_Frames; //3
+	long long Global_Time; //4
+	float Local_X; //5
+	float Local_Y; //6
+	float Global_X; //7
+	float Global_Y; //8
+	float Vehicle_Length; //9
+	float Vehicle_Width; //10
+	int	Vehicle_Class; //11
+	float	Vehicle_Velocity; //12
+	float	Vehicle_Acceleration; //13
+	int 	Lane_Identification; //14
+	int	Preceding_Vehicle; //15
+	int	Following_Vehicle; //16
+	float	Spacing; //17
+	float	Headway; //18
+	float CalculatedSpeed;
+	//SITSLAB
+	int old_Lane_Identification;
+	int num_passed_lanes;
+	bool b_exclude_current_vehicle = false;
+	//SITSLAB: exclude vehicles that have changed lanes
+	m_bExcludeLaneChangingVehicles = true;
+	vector<VehicleSnapshotData> current_vehicle_element_vector;
+	int prev_Frame_ID;
+	int prev_Total_Frames;
+	std::vector<VehicleSnapshotData> OriginalDataVector;
+	vector<VehicleSnapshotData> Copy_OriginalDataVector;
+	CTime ExeStartTime = CTime::GetCurrentTime();
+	int line = 0;
+	CWaitCursor wc;
+	char fname[_MAX_PATH];
+	wsprintf(fname, "%s", file_name);
+	FILE* st;
+	m_LocalYUpperBound = 0;
+	m_LocalYLowerBound = 9999999;
+	//sdzhao
+	map<int, float> out_laneno_max_acc;
+	map<int, int> out_laneno_first_veh_no;
+	map<int, map<int, ostringstream>> out_laneno_vehno_trajectory;
+	map<int, map<int, ostringstream>> out_laneno_vehno_entry_time;
+	map<int, map<int, int>> out_laneno_velocity_frequency;
+	map<int, double> min_frame_id;
+	map<int, float> out_laneno_min_acc;
+	map<int, float> out_laneno_max_velocity;
+	map<int, float> out_laneno_avg_headway;
+	map<int, float> out_laneno_avg_spacing;
+	map<int, float> out_laneno_max_Local_Y;
+	map<int, ostringstream> out_vehicle_entry_time;
+
+	map<int, VehicleSnapshotData> vehicle_no_latest_information;
+	map<int, VehicleCFData> vehicle_cf_data_map;
+	map<int, vector<VehicleSnapshotData>> current_vehicle_element_map;
+	map<int, int> ngsim_to_index_map;
+
+	ifstream input_file(fname);
+	string str_line;
+	float prev_local_y = -1;
+	if (input_file.is_open())	//if(st!=NULL)
+	{
+		m_NumberOfVehicles = 0;
+		m_NumberOfTimeSteps = 0;
+		int Prev_Vehicle_ID = -1;
+		int current_line = 0;
+		vector<string> tokens;
+
+		while (input_file.good()) //while (!feof(st))
+		{
+			getline(input_file, str_line);
+			if (str_line != "")
+			{
+				current_line++;
+				if (current_line > 18)
+				{
+					string_split(tokens, str_line, ";");
+					VehicleCFData vcd;
+					
+					Vehicle_ID = stoi(tokens[1]); 
+					if (Vehicle_ID < 0)
+						break;
+					Frame_ID = round(stof(tokens[0]) / 0.1);
+					if (Frame_ID > m_NumberOfTimeSteps)
+					{ 
+						m_NumberOfTimeSteps = Frame_ID;
+					}
+					Local_X = stof(tokens[5]); 
+					if (!metric)
+						Local_Y = stof(tokens[4]);
+					else
+						Local_Y = stof(tokens[4])*0.3048;
+
+					if (Local_Y > m_LocalYUpperBound)
+					{ 
+						m_LocalYUpperBound = Local_Y;
+					}
+					if (Local_Y < m_LocalYLowerBound)
+					{
+						m_LocalYLowerBound = Local_Y;
+					}
+					CalculatedSpeed = 0;
+
+					if (vehicle_no_latest_information.find(Vehicle_ID) == vehicle_no_latest_information.end())
+					{
+						Vehicle_Velocity = 0.0;
+						Vehicle_Acceleration = 0.0;
+					}
+					else
+					{
+						VehicleSnapshotData vehicle_data = vehicle_no_latest_information[Vehicle_ID];
+						Vehicle_Velocity = (Local_Y - vehicle_data.LocalY) / (Frame_ID - vehicle_data.Frame_ID) * 10.0 * 0.681818182;
+						Vehicle_Acceleration = (Vehicle_Velocity - vehicle_data.Speed_mph) / (Frame_ID - vehicle_data.Frame_ID) * 10.0;
+					}
+					//if (Vehicle_ID == Prev_Vehicle_ID)
+					//{
+					//	CalculatedSpeed = (Local_Y - prev_local_y)*10.0f * 0.681818182;  // convert from feet per second to mph
+					//}
+					prev_local_y = Local_Y;
+					Global_X = stof(tokens[5]);	
+					if (!metric)
+						Global_Y = stof(tokens[4]);
+					else
+						Global_Y = stof(tokens[4])*3280.84;
+					//Global_Y = stof(tokens[4]);		
+					Lane_Identification = stoi(tokens[3]); //g_read_integer(st); //14
+				
+					Global_Time = 0;	// g_read_integer(st); //4
+					Vehicle_Length = 0; // g_read_float(st); //9
+					Vehicle_Width = 0; //g_read_float(st); //10
+					Vehicle_Class = 0;  //g_read_integer(st); //11
+					Vehicle_Velocity = 0; //g_read_float(st); //12
+					Preceding_Vehicle = 0; // g_read_integer(st); //15
+					Following_Vehicle = 0; //g_read_integer(st); //16
+					Spacing = 0; //g_read_float(st); //17
+
+					if (current_line == 18)
+					{
+						Vehicle_Velocity = 0;
+						Prev_Vehicle_ID = Vehicle_ID;
+						old_Lane_Identification = Lane_Identification;
+						prev_Frame_ID = Frame_ID;
+						Total_Frames = Frame_ID;
+						prev_Total_Frames = Total_Frames;
+					}
+					else
+					{
+						Total_Frames = Total_Frames > Frame_ID ? Total_Frames : Frame_ID;
+					}
+
+					if (m_bExcludeLaneChangingVehicles)
+					{
+						if (Vehicle_ID == Prev_Vehicle_ID && Lane_Identification != old_Lane_Identification)
+						{
+							b_exclude_current_vehicle = true;
+						}
+					}
+					old_Lane_Identification = Lane_Identification;
+					
+					//if (Vehicle_ID != Prev_Vehicle_ID)
+					//{
+						if (out_vehicle_entry_time.find(Lane_Identification) == out_vehicle_entry_time.end())
+						{
+							out_laneno_max_velocity[Lane_Identification] = 0.0;
+							out_laneno_max_Local_Y[Lane_Identification] = 0.0;
+							out_laneno_max_acc[Lane_Identification] = -DBL_MAX;
+							out_laneno_min_acc[Lane_Identification] = DBL_MAX;
+							out_laneno_first_veh_no[Lane_Identification] = -1;
+							out_vehicle_entry_time[Lane_Identification] << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
+							min_frame_id[Lane_Identification] = DBL_MAX;
+							//velocity frequency
+							out_laneno_velocity_frequency[Lane_Identification][0] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][1] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][2] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][3] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][4] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][5] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][6] = 0;
+							out_laneno_velocity_frequency[Lane_Identification][7] = 0;
+						}
+						out_vehicle_entry_time[Lane_Identification] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
+						out_laneno_first_veh_no[Lane_Identification] = (Frame_ID < min_frame_id[Lane_Identification]) ? Vehicle_ID : out_laneno_first_veh_no[Lane_Identification];
+						min_frame_id[Lane_Identification] = (Frame_ID < min_frame_id[Lane_Identification]) ? Frame_ID : min_frame_id[Lane_Identification];
+					//}
+					
+					out_laneno_max_velocity[Lane_Identification] = max(out_laneno_max_velocity[Lane_Identification], Vehicle_Velocity*0.3048);
+					out_laneno_max_Local_Y[Lane_Identification] = max(out_laneno_max_Local_Y[Lane_Identification], Local_Y*0.3048);
+					out_laneno_min_acc[Lane_Identification] = min(out_laneno_min_acc[Lane_Identification], Vehicle_Acceleration*0.3048);
+					out_laneno_max_acc[Lane_Identification] = max(out_laneno_max_acc[Lane_Identification], Vehicle_Acceleration*0.3048);
+
+					int velocity_index = (int)((Vehicle_Velocity * 0.681818182) / 10);
+					out_laneno_velocity_frequency[Lane_Identification][velocity_index]++;
+
+					//output vehicle trajectories
+					out_laneno_vehno_trajectory[Lane_Identification][Vehicle_ID] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
+					if (Vehicle_ID != Prev_Vehicle_ID)
+					{
+						out_laneno_vehno_entry_time[Lane_Identification][Vehicle_ID] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
+					}
+
+					vehicle_cf_data_map[Vehicle_ID].StartTime = prev_Frame_ID - prev_Total_Frames + 1;
+					vehicle_cf_data_map[Vehicle_ID].EndTime = prev_Frame_ID + 1;
+
+					//
+					//
+					//out_laneno_avg_headway[Lane_Identification] += Headway;
+					//out_laneno_avg_spacing[Lane_Identification] += Spacing;
+					/*if (Vehicle_ID != Prev_Vehicle_ID && b_exclude_current_vehicle == false)
+					{
+						m_NumberOfVehicles++;
+						m_VehicleIDtoNOMap[Vehicle_ID] = m_NumberOfVehicles;  // ID to sequential No.
+						vcd.VehicleID = Prev_Vehicle_ID;
+						Prev_Vehicle_ID = Vehicle_ID;
+						vcd.StartTime = prev_Frame_ID - prev_Total_Frames + 1;
+						vcd.EndTime = prev_Frame_ID + 1;
+						if (Frame_ID + 1 > m_NumberOfTimeSteps)//if(Frame_ID + Total_Frames > m_NumberOfTimeSteps)
+						{
+							m_NumberOfTimeSteps = Frame_ID + Total_Frames;
+						}
+						vcd.VehicleType = Vehicle_Class;
+						m_VehicleDataList.push_back(vcd);
+						for (int i = 0; i < current_vehicle_element_vector.size(); i++)
+						{
+							OriginalDataVector.push_back(current_vehicle_element_vector[i]);
+						}
+						current_vehicle_element_vector.clear();
+					}
+					if (Vehicle_ID != Prev_Vehicle_ID)
+					{
+
+						Prev_Vehicle_ID = Vehicle_ID;
+						b_exclude_current_vehicle = false;
+						current_vehicle_element_vector.clear();
+					}*/
+					
+					VehicleSnapshotData element;
+					element.NGSIM_Vehicle_ID = Vehicle_ID;
+					//element.VehicleID = m_NumberOfVehicles;
+					if (ngsim_to_index_map.find(Vehicle_ID) == ngsim_to_index_map.end())
+					{
+						element.VehicleID = ngsim_to_index_map.size();
+						ngsim_to_index_map.insert(make_pair(Vehicle_ID, element.VehicleID));
+					}
+					else
+					{
+						element.VehicleID = ngsim_to_index_map[Vehicle_ID];
+					}
+					element.Frame_ID = Frame_ID;
+					element.LocalY = Local_Y;  //m_NumberOfVehicles-1 make sure the index starting from 0
+					element.LaneID = Lane_Identification;
+					element.Speed_mph = Vehicle_Velocity * 0.681818182;  // convert from feet per second to mph
+					element.CalculatedSpeed_mph = CalculatedSpeed;
+					element.PrecedingVehicleID = Preceding_Vehicle;
+					element.FollowingVehicleID = Following_Vehicle;
+					element.Acceleration = Vehicle_Acceleration*0.3048; //mps
+					element.Spacing_meters = Spacing * 0.3048;
+					m_SelectLaneID = Lane_Identification;  // set Lane ID as a given number
+
+					//OriginalDataVector.push_back(element);
+					Copy_OriginalDataVector.push_back(element);
+					current_vehicle_element_map[Vehicle_ID].push_back(element);
+					//current_vehicle_element_vector.push_back(element);
+					prev_Frame_ID = Frame_ID;
+					prev_Total_Frames = Total_Frames;
+					line++;
+
+					vehicle_no_latest_information.insert(make_pair(Vehicle_ID, element));
+				}
+			}
+		}
+	}
+
+	m_NumberOfVehicles = vehicle_cf_data_map.size();
+	map<int, VehicleCFData>::iterator iter = vehicle_cf_data_map.begin();
+	for (; iter != vehicle_cf_data_map.end(); iter++)
+	{
+		int Vehicle_ID = iter->first; 
+		
+		m_VehicleDataList.push_back(iter->second);
+		current_vehicle_element_vector = current_vehicle_element_map[Vehicle_ID];
+		for (int i = 0; i < current_vehicle_element_vector.size(); i++)
+		{
+			OriginalDataVector.push_back(current_vehicle_element_vector[i]);
+		}
+	}
+
+	input_file.close();
+	//sdzhao: export vehicle entry time to file
+	//out_vehicle_entry_time
+	char cCurrentPath[FILENAME_MAX];
+	if (!GetCurrentDir(cCurrentPath, sizeof(cCurrentPath)))
+		cout << "error current dir" << endl;
+	string summary_folder(cCurrentPath);
+
+	summary_folder += "/summary";
+	if (CreateDirectory(summary_folder.c_str(), NULL))
+		cout << "yes" << endl;
+	else
+	{
+		cout << "fail" << endl;
+	}
+
+	for (auto &iter : out_vehicle_entry_time)
+	{
+		//  		ofstream f_veh_entry_time("NGSIM_vehicle_entry_time_" + to_string(iter.first) + ".csv", fstream::out);
+		//  		f_veh_entry_time << iter.second.str();
+		// 		iter.second.str(""); //clear contents
+		//  		f_veh_entry_time.close();
+
+		ofstream f_summary(summary_folder + "/NGSIM_summary_" + to_string(iter.first) + ".csv", fstream::out);
+		f_summary << "max velocity(mps)," << out_laneno_max_velocity[iter.first] << endl;			//1
+		f_summary << "max velocity(kph)," << out_laneno_max_velocity[iter.first] * 3.6 << endl;		//2
+		f_summary << "max position(meters)," << out_laneno_max_Local_Y[iter.first] << endl;			//3
+		f_summary << "max acceleration(mps2)," << out_laneno_max_acc[iter.first] << endl;			//4
+		f_summary << "min acceleration(mps2)," << out_laneno_min_acc[iter.first] << endl;			//5
+		f_summary << "first_vehicle_ID," << out_laneno_first_veh_no[iter.first] << endl;			//6
+		f_summary << "desired interval/Tao (seconds)," << endl;										//7
+		f_summary << "desired min spacing/d (meters)," << endl;										//8
+		f_summary << "Count of Velocity(0~10 mph)," << out_laneno_velocity_frequency[Lane_Identification][0] << endl;
+		f_summary << "Count of Velocity(10~20 mph)," << out_laneno_velocity_frequency[Lane_Identification][1] << endl;
+		f_summary << "Count of Velocity(20~30 mph)," << out_laneno_velocity_frequency[Lane_Identification][2] << endl;
+		f_summary << "Count of Velocity(30~40 mph)," << out_laneno_velocity_frequency[Lane_Identification][3] << endl;
+		f_summary << "Count of Velocity(40~50 mph)," << out_laneno_velocity_frequency[Lane_Identification][4] << endl;
+		f_summary << "Count of Velocity(50~60 mph)," << out_laneno_velocity_frequency[Lane_Identification][5] << endl;
+		f_summary << "Count of Velocity(60~70 mph)," << out_laneno_velocity_frequency[Lane_Identification][6] << endl;
+		f_summary << "Count of Velocity(70+ mph)," << out_laneno_velocity_frequency[Lane_Identification][7] << endl;
+		//f_summary << "average headway (seconds)," << out_laneno_avg_headway[iter.first] << endl;
+		//f_summary << "average spacing (meters)," << out_laneno_avg_spacing[iter.first] * 0.3048 << endl;
+		f_summary.close();
+	}
+
+	m_VehicleSnapshotAry = AllocateDynamicArray<VehicleSnapshotData>(m_NumberOfVehicles, m_NumberOfTimeSteps + 1);
+
+	map<int, vector<VehicleSnapshotData>> lane_no_first_25_vehs;
+
+	for (unsigned i = 0; i < Copy_OriginalDataVector.size(); i++) //Copy_OriginalDataVector
+	{
+		VehicleSnapshotData element = Copy_OriginalDataVector[i];
+		//
+		int id = element.NGSIM_Vehicle_ID;
+		auto pred = [id](const VehicleSnapshotData & item) {
+			return item.NGSIM_Vehicle_ID == id;
+		};
+		if (std::find_if(std::begin(lane_no_first_25_vehs[element.LaneID]), std::end(lane_no_first_25_vehs[element.LaneID]), pred) == std::end(lane_no_first_25_vehs[element.LaneID])){
+			lane_no_first_25_vehs[element.LaneID].push_back(element);
+		}
+		//
+		////sdzhao export first vehicle trajectory
+		if (out_laneno_first_veh_no[element.LaneID] == element.NGSIM_Vehicle_ID){
+			out_vehicle_entry_time[element.LaneID]
+				<< element.NGSIM_Vehicle_ID << ","
+				<< element.Frame_ID << ","
+				<< element.Speed_mph * 0.44704 << ","	//mps
+				<< element.Acceleration << ","			//mps2
+				<< element.LocalY *0.3048 << endl;      //meters
+		}
+	}
+	if (lane_no_first_25_vehs.size()>25)
+	{ 
+		for (auto &iter : lane_no_first_25_vehs){
+			vector<VehicleSnapshotData>& vec = iter.second;
+			sort(vec.begin(), vec.end(), CompareByEntryTime);
+			vec.erase(vec.begin() + 25, vec.end());
+
+			ofstream f_traj_time("NGSIM_1_25_vehicle_entrytime_" + to_string(iter.first) + ".csv", fstream::out);
+			for (int i = 0; i < 24; i++){
+				f_traj_time << vec[i].NGSIM_Vehicle_ID << ","
+					<< vec[i].Frame_ID << ","
+					<< vec[i].Speed_mph * 0.44704 << ","	//mps
+					<< vec[i].Acceleration << ","			//mps2
+					<< vec[i].LocalY *0.3048 << endl;      //meters
+			}
+			f_traj_time.close();
+		}
+	}
+	map<int, vector<VehicleSnapshotData>> lane_no_first_25_vehs_traj;
+	for (unsigned i = 0; i < Copy_OriginalDataVector.size(); i++) //Copy_OriginalDataVector
+	{
+		VehicleSnapshotData element = Copy_OriginalDataVector[i];
+		vector<VehicleSnapshotData>& vec = lane_no_first_25_vehs[element.LaneID];
+		//if (vec.find(element.))
+		int id = element.NGSIM_Vehicle_ID;
+		auto pred = [id](const VehicleSnapshotData & item) {
+			return item.NGSIM_Vehicle_ID == id;
+		};
+		if (std::find_if(std::begin(vec), std::end(vec), pred) != std::end(vec)){
+
+			lane_no_first_25_vehs_traj[element.LaneID].push_back(element);
+		}
+	}
+
+	for (auto &iter : lane_no_first_25_vehs_traj){
+		ofstream f_traj_time("NGSIM_1_25_vehicle_trajectory_" + to_string(iter.first) + ".csv", fstream::out);
+		vector<VehicleSnapshotData>& vec = iter.second;
+		for (int i = 0; i < vec.size(); i++){
+			f_traj_time << vec[i].NGSIM_Vehicle_ID << ","
+				<< vec[i].Frame_ID << ","
+				<< vec[i].Speed_mph * 0.44704 << ","	//mps
+				<< vec[i].Acceleration << ","			//mps2
+				<< vec[i].LocalY *0.3048 << ","
+				<< vec[i].Spacing_meters << endl;      //meters
+		}
+		f_traj_time.close();
+	}
+
+	for (auto &lane : out_laneno_vehno_entry_time){
+		int num_vehs_per_lane = lane.second.size();
+		int veh_index = 0;
+		ofstream f_veh_entry_time("NGSIM_vehicle_entry_time_" + to_string(lane.first) + ".csv", fstream::out);
+		f_veh_entry_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
+		ofstream f_veh_traj_time("NGSIM_shockwave_vehicle_trajectory_" + to_string(lane.first) + ".csv", fstream::out);
+		f_veh_traj_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
+		int num_front_vehs = 14;
+		for (auto &veh : lane.second){
+			// 			if (veh_index >= num_vehs_per_lane - 90 - num_front_vehs && veh_index <= num_vehs_per_lane - 90)//if (veh_index >= num_vehs_per_lane - 90 && veh_index <= num_vehs_per_lane - 90+5)
+			// 			{
+			// 				f_veh_traj_time << veh.second.str();
+			// 			}
+			if (veh_index >= num_vehs_per_lane - 90 - num_front_vehs && veh_index <= num_vehs_per_lane - 90 + 5)
+			{
+				f_veh_traj_time << out_laneno_vehno_trajectory[lane.first][veh.first].str();
+				f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
+			}
+			else if (veh_index > num_vehs_per_lane - 90 && veh_index <= num_vehs_per_lane - 90 + 5)
+				f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
+			veh_index++;
+		}
+		f_veh_entry_time.close();
+		f_veh_traj_time.close();
+	}
+
+	for (unsigned i = 0; i < OriginalDataVector.size(); i++)
+	{
+		VehicleSnapshotData element = OriginalDataVector[i];
+
+		m_VehicleSnapshotAry[element.VehicleID][element.Frame_ID].LaneID = element.LaneID;
+		m_VehicleSnapshotAry[element.VehicleID][element.Frame_ID].LocalY = element.LocalY;
+		m_VehicleSnapshotAry[element.VehicleID][element.Frame_ID].Speed_mph = element.Speed_mph;
+		m_VehicleSnapshotAry[element.VehicleID][element.Frame_ID].CalculatedSpeed_mph = element.CalculatedSpeed_mph;
+		m_VehicleSnapshotAry[element.VehicleID][element.Frame_ID].PrecedingVehicleID = element.PrecedingVehicleID;
+		m_VehicleSnapshotAry[element.VehicleID][element.Frame_ID].FollowingVehicleID = element.FollowingVehicleID;
+		if (StartTimeLane[element.LaneID] < 0)
+			StartTimeLane[element.LaneID] = element.Frame_ID;
+		StartTimeLane[element.LaneID] = element.Frame_ID < StartTimeLane[element.LaneID] ? element.Frame_ID : StartTimeLane[element.LaneID];
+		EndTimeLane[element.LaneID] = element.Frame_ID > EndTimeLane[element.LaneID] ? element.Frame_ID : EndTimeLane[element.LaneID];
+	}
+	
+	VehicleSnapshotData element = m_VehicleSnapshotAry[0][0]; 
+
+	m_TimeLeft = 0;
+	m_TimeRight = m_NumberOfTimeSteps;
+	//read NGSIM scenario to get time interval and sensor spacing
+	//ConstructCellBasedDensityProfile();
+	ReadNGSIMScenarioFile();
+	//float SensorSpacing = m_DataCollectionSensorSpacing_in_feet; // 200;
+	float SensorSpacing = 200;
+	float boundary_offset = 50;
+	int data_collection_time_interval_in_sec = m_DataCollectionTimeInternval_in_sec;	//= 30;
+	//ConstructCellBasedDensityProfile(int(boundary_offset), boundary_offset, data_collection_time_interval_in_sec);
+	//ConstructCellBasedDensityProfile(int(boundary_offset / 2), int(boundary_offset / 2), data_collection_time_interval_in_sec);
+	ConstructCellBasedDensityProfile(SensorSpacing, boundary_offset, data_collection_time_interval_in_sec);
 }
 
 void CTimeSpaceView::OnToolsLoadvehicletrajactoryfile_backup()

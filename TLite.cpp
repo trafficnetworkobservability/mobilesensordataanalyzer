@@ -104,7 +104,10 @@ CTLiteApp::CTLiteApp()
 	m_pTemplateTimeTableView = false;
 	m_pDocTemplate2DView = NULL;
 	m_pTemplateTimeTableView = NULL;
+	
 
+	//Add by Qinjie Lyu
+	m_bLoadedDataFromVissim = false;
 }
 BOOL CTLiteApp::InitInstance()
 {

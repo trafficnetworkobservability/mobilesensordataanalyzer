@@ -447,11 +447,12 @@ public:
 	int m_SelectedVehicleCount; 
 	bool m_bMouseDownFlag;
 
-	
 	bool m_bLoadedDataFlag;
+	bool m_bLoadedDataFromVissim;
 	bool m_bAutoLoadDataFlag;
 	void LoadVehicleTrajectoryFile(CString file_name);
 
+	void LoadVehicleTrajectoryFileFromVissim(CString file_name, bool unit);
 	int m_NumberOfVehicles_lane;
 
 	int m_lane_size;
@@ -729,6 +730,7 @@ public:
 	afx_msg void OnLButtonUp(UINT nFlags, CPoint point);
 	afx_msg void OnClose();
 	afx_msg void OnToolsLoadvehicletrajactoryfile();
+	afx_msg void OnToolsLoadvehicletrajactoryfileFromVissim(bool unit);
 	afx_msg void OnNgsimdataLane1();
 	afx_msg void OnNgsimdataLane2();
 	afx_msg void OnNgsimdataLane3();

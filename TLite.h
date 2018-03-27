@@ -93,6 +93,10 @@ public:
 	CMultiDocTemplate* m_pDocTemplate2DView;
 	CMultiDocTemplate* m_pTemplateGLView;
 	CMultiDocTemplate* m_pTemplateTimeTableView;
+
+	//Add by Qinjie Lyu
+	bool m_bLoadedDataFromVissim;
+	bool m_metric;
 // Overrides
 public:
 

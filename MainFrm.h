@@ -140,6 +140,8 @@ public:
 	afx_msg void OnBnClickedButtonDatabase();
 	afx_msg void OnBnClickedButtonConfiguration();
 	afx_msg void OnNgsimmenuActivatespace();
+	afx_msg void OnVissimmenuActivatespaceImperial();
+	afx_msg void OnVissimmenuActivatespaceMetric();
 	afx_msg void OnViewSimulationtoolbar();
 	afx_msg void OnUpdateViewSimulationtoolbar(CCmdUI *pCmdUI);
 };
