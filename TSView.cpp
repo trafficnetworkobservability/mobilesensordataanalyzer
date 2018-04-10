@@ -1118,6 +1118,11 @@ void CTimeSpaceView::OnToolsLoadvehicletrajactoryfile()
 bool CompareByEntryTime(const VehicleSnapshotData &a, const VehicleSnapshotData &b) {
 	return a.Frame_ID < b.Frame_ID;
 };
+
+bool CompareByPairEntryTime(const pair<int, int> &a, const pair<int, int> &b) {
+	return a.second < b.second;	// a.entry_time < b.entry_time;
+};
+
 void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 {
 
@@ -1216,7 +1221,10 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 	map<int, float> out_laneno_avg_spacing;
 	map<int, float> out_laneno_max_Local_Y;
 	map<int,ostringstream> out_vehicle_entry_time;
+	map<int, vector<pair<int,int>>> laneno_vehicleID_sorted_vector;
 	//out_vehicle_entry_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m)" << endl;
+
+	map<int,int> excluded_vehicleID_vector;
 
 	//fopen_s(&st,fname,"r");
 	ifstream input_file(fname);
@@ -1342,13 +1350,15 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 					if (Vehicle_ID == Prev_Vehicle_ID && Lane_Identification != old_Lane_Identification)
 					{
 						b_exclude_current_vehicle = true;
+						excluded_vehicleID_vector[Vehicle_ID]++;
 					}
 
 				}
 
 				old_Lane_Identification = Lane_Identification;
 
-				if (Vehicle_ID != Prev_Vehicle_ID){
+				if (Vehicle_ID != Prev_Vehicle_ID && b_exclude_current_vehicle == false)//04022018: if (Vehicle_ID != Prev_Vehicle_ID)
+				{
 					if (out_vehicle_entry_time.find(Lane_Identification) == out_vehicle_entry_time.end()){
 						out_laneno_max_velocity[Lane_Identification] = 0.0;
 						out_laneno_max_Local_Y[Lane_Identification] = 0.0;
@@ -1369,9 +1379,13 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 						out_laneno_velocity_frequency[Lane_Identification][7] = 0;
 					}
 					out_vehicle_entry_time[Lane_Identification] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
-					
+					laneno_vehicleID_sorted_vector[Lane_Identification].push_back(make_pair(Vehicle_ID, Frame_ID));
 					out_laneno_first_veh_no[Lane_Identification] = (Frame_ID < min_frame_id[Lane_Identification]) ? Vehicle_ID : out_laneno_first_veh_no[Lane_Identification];
 					min_frame_id[Lane_Identification] = (Frame_ID < min_frame_id[Lane_Identification]) ? Frame_ID : min_frame_id[Lane_Identification];
+					
+					//
+					//output vehicle trajectories
+				
 				}
 				out_laneno_max_velocity[Lane_Identification] = max(out_laneno_max_velocity[Lane_Identification], Vehicle_Velocity*0.3048);
 				out_laneno_max_Local_Y[Lane_Identification] = max(out_laneno_max_Local_Y[Lane_Identification], Local_Y*0.3048);
@@ -1381,7 +1395,6 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 				int velocity_index = (int) ((Vehicle_Velocity * 0.681818182) / 10);
 				out_laneno_velocity_frequency[Lane_Identification][velocity_index]++;
 
-				//output vehicle trajectories
 				out_laneno_vehno_trajectory[Lane_Identification][Vehicle_ID] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
 				if (Vehicle_ID != Prev_Vehicle_ID){
 					out_laneno_vehno_entry_time[Lane_Identification][Vehicle_ID] << Vehicle_ID << "," << Frame_ID << "," << Vehicle_Velocity*0.3048 << "," << Local_Y*0.3048 << "," << prev_Frame_ID << endl;
@@ -1392,7 +1405,6 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 				//out_laneno_avg_headway[Lane_Identification] += Headway;
 				//out_laneno_avg_spacing[Lane_Identification] += Spacing;
 				if (Vehicle_ID != Prev_Vehicle_ID && b_exclude_current_vehicle == false)
-
 				{
 
 					//sdzhao out_vehicle_entry_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m)" << endl;
@@ -1677,27 +1689,51 @@ void CTimeSpaceView::LoadVehicleTrajectoryFile(CString file_name)
 		f_traj_time.close();
 	}
 
-	for (auto &lane : out_laneno_vehno_entry_time){
+	//vector sort
+
+
+
+	for (auto &lane : laneno_vehicleID_sorted_vector)
+	{
+		vector<pair<int, int>> &vehicleID_EntryTime_Pair_Vector = lane.second;
+		sort(vehicleID_EntryTime_Pair_Vector.begin(), vehicleID_EntryTime_Pair_Vector.end(), CompareByPairEntryTime);
+	}
+	for (auto &lane : laneno_vehicleID_sorted_vector)//for (auto &lane : out_laneno_vehno_entry_time)
+	{
 		int num_vehs_per_lane = lane.second.size();
 		int veh_index = 0;
 		ofstream f_veh_entry_time("NGSIM_vehicle_entry_time_" + to_string(lane.first) + ".csv", fstream::out);
 		f_veh_entry_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
 		ofstream f_veh_traj_time("NGSIM_shockwave_vehicle_trajectory_" + to_string(lane.first) + ".csv", fstream::out);
 		f_veh_traj_time << "Vehicle_ID,Frame_ID,Vehicle_Velocity(mps),Local_Y(m),prev_veh_exit_time" << endl;
-		int num_front_vehs = 14;
-		for (auto &veh : lane.second){
+		
+		//-----------put num_front_vehs into scenario file, num_deduct_vehicles
+		int number_of_total_vehicles_output = 20;
+		int num_deduct_vehicles = 107;
+		//--------------
+		int platoon_size = 5;
+		int num_front_vehs = number_of_total_vehicles_output - 1 - platoon_size;
+		
+		for (auto &veh : lane.second)
+		{
+			//exclude 
+			if (excluded_vehicleID_vector.find(veh.first) != excluded_vehicleID_vector.end())
+				continue;
+
 // 			if (veh_index >= num_vehs_per_lane - 90 - num_front_vehs && veh_index <= num_vehs_per_lane - 90)//if (veh_index >= num_vehs_per_lane - 90 && veh_index <= num_vehs_per_lane - 90+5)
 // 			{
 // 				f_veh_traj_time << veh.second.str();
 // 			}
-			if (veh_index >= num_vehs_per_lane - 90 - num_front_vehs && veh_index <= num_vehs_per_lane - 90 + 5)
+			 //26
+			if (veh_index >= num_vehs_per_lane  - num_front_vehs - num_deduct_vehicles&& veh_index <= num_vehs_per_lane  + 5 - num_deduct_vehicles)
 			{
 				f_veh_traj_time << out_laneno_vehno_trajectory[lane.first][veh.first].str();
 				f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
 			}
-			else if (veh_index > num_vehs_per_lane - 90 && veh_index <= num_vehs_per_lane - 90 + 5)
-				f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
-
+			else if (veh_index > num_vehs_per_lane - 26 && veh_index <= num_vehs_per_lane - 26 + 5)
+			{
+				//f_veh_entry_time << out_laneno_vehno_entry_time[lane.first][veh.first].str();
+			}
 			veh_index++;
 		}
 		f_veh_entry_time.close();
