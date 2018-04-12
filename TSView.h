@@ -419,8 +419,8 @@ public:
 	int VehicleID;
 	int NGSIM_Vehicle_ID;
 
-	double LocalX;
-	double LocalY;
+	double LocalX = 0;
+	double LocalY = 0;
 	float CalculatedSpeed_mph;
 	float Speed_mph;
 	int VehicleClass;
@@ -543,6 +543,8 @@ public:
    int m_SelectedStartTime,m_SelectedEndTime;
    float m_SelectedStartLocalY,m_SelectedEndLocalY;
 
+   bool m_bOutputVissimToNGSIM;
+   float m_45_degree_velocity;
    // Operations
 public:
 	void InitializeTimeRange();
